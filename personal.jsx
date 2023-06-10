@@ -1,6 +1,6 @@
 const url="https://codeforces.com/api/"
-var datas=[] 
 let initialtime
+var datas=[]
 var ratings=[]
 var ratingchange=[]
 
@@ -73,7 +73,7 @@ window.onload=function(){
            }
            getproblemdata(url)
 
-           function callforproblemset(data){
+           async function callforproblemset(data){
                 let filterdata=[]
                 for(var i=0;i<data.length;i++){
                     if(data[i].verdict=="OK"){
@@ -100,17 +100,25 @@ window.onload=function(){
                    arr=ratings[i]
                    sum=0
                    for(var j=0;j<arr.length;j++){
+                     if(typeof arr[j].rating=='undefined'){
+                        
+                        sum+=datas[datas.length-1].y
+                     }
+                     else{
                      sum+=arr[j].rating
+                     }
                    }
+                   if((arr.length)){
                    sum/=(arr.length)
+                   }
                    graph.push(Math.floor(sum))
                 }
                 console.log(graph)
                 console.log(ratingchange)
 
-                datas=[]
+                var dataid=[]
                 for(var i=0;i<graph.length;i++){
-                    datas.push({x:graph[i],y:ratingchange[i]})
+                    dataid.push({x:graph[i],y:ratingchange[i]})
                 }
 
                 var chartid1=document.getElementById("myChart1").getContext("2d")
@@ -121,16 +129,107 @@ window.onload=function(){
                         datasets: [{
                             pointRadius: 4,
                             pointBackgroundColor: "rgb(0,0,255)",
-                            data: datas
+                            data: dataid
                           }]
                     }
                 })
                 document.getElementById("graphstatement").innerHTML="rating change with average rating problem solve in given time period"
-
-
+                
+                
+                const model=createModel()
+                tfvis.show.modelSummary({name:'ModelSummary'},model)
+                const TensorData=convertTensor(dataid)
+                const {inputs,labels,inputMin}=TensorData
+                console.log(inputMin)
+                 
+                console.log(inputs,labels,model)
+                // train the data
+                 await trainmodel(model,inputs,labels)
+                console.log('done training')
                 
                 
            }
+
+           
+                // start regression technique
+                function createModel(){
+                    // create a sequential model
+                    const model= tf.sequential()
+
+                    //add single input layer
+                    model.add(tf.layers.dense({inputShape:[1],units:1,useBias:true}))
+
+                    // add output layer
+                    model.add(tf.layers.dense({units:1,useBias:true}))
+
+                    return model
+
+                }
+               // convert model to tensor and do shuffling and normalization
+                function convertTensor(data){
+                  
+
+                    return tf.tidy(()=>{
+                       // shuffle the data
+                       tf.util.shuffle(data)
+                       
+                       // convert data to tensor
+                       const inputs=data.map(d => d.x)
+                       const labels=data.map(d => d.y)
+
+                       const inputTensor= tf.tensor2d(inputs,[inputs.length,1])
+                       const labelTensor= tf.tensor2d(labels,[labels.length,1])
+
+                       // normalize data to 0-1 using min-max normalization
+                       const inputMax= inputTensor.max()
+                       const inputMin =inputTensor.min()
+                       const labelMax= labelTensor.max()
+                       const labelMin=labelTensor.min()
+
+                       const normalizedInput=inputTensor.sub(inputMin).div(inputMax.sub(inputMin))
+                       const normalizedlabel=inputTensor.sub(labelMin).div(labelMax.sub(labelMin))
+
+                       return {
+                         inputs:normalizedInput,
+                         labels:normalizedlabel,
+                         inputMin,
+                         inputMax,
+                         labelMin,
+                         labelMax
+                       }
+
+                    })
+                }
+
+                async function trainmodel(model,inputs,labels){
+                    // prepare the model for training
+                    model.compile({
+                        // algorithm used
+                        optimizer: tf.train.adam(),
+                        // loss model using meansquarederror
+                        loss: tf.losses.meanSquaredError,
+                        metrics: ['mse'],
+                    })
+                    const batchSize =datas.length
+                    const epochs = 50
+
+                    return await model.fit(inputs,labels,{
+                        batchSize,
+                        epochs,
+                        shuffle:true,
+                        callbacks: tfvis.show.fitCallbacks(
+                            { name: 'Training Performance' },
+                            ['loss', 'mse'],
+                            { height: 200, callbacks: ['onEpochEnd'] }
+                        )
+                    })
+                                    
+                }
+                
+
+
+
+
            
     
 
