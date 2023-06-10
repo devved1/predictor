@@ -2,6 +2,7 @@ const url="https://codeforces.com/api/"
 var datas=[] 
 let initialtime
 var ratings=[]
+var ratingchange=[]
 
 
 window.onload=function(){
@@ -38,28 +39,21 @@ window.onload=function(){
         getratingdata(url)
        
         function nextquery(data){
-            // plot graphs for 2 data objects rating vs time
             
     
             initialtime=data[0].ratingUpdateTimeSeconds
+            let prev=0
+            for(var i=0;i<data.length;i++){
+               ratingchange.push(data[i].newRating-prev)
+               prev=data[i].newRating
+            }
 
             for(var it=0;it<data.length;it++){
               datas.push({x:data[it].ratingUpdateTimeSeconds-initialtime,y:data[it].newRating})
             }
             console.log(datas)
-            var chartid1=document.getElementById("myChart1").getContext("2d")
 
 
-            new Chart(chartid1,{
-                type:"scatter",
-                data:{
-                    datasets: [{
-                        pointRadius: 4,
-                        pointBackgroundColor: "rgb(0,0,255)",
-                        data: datas
-                      }]
-                }
-            })
 
         }
         // fetching data of users problems submit
@@ -99,6 +93,42 @@ window.onload=function(){
                     prevtime=currtime
                 }
                 console.log(ratings)
+
+                let graph=[]
+                for(var i=0;i<ratings.length;i++){
+                   let arr=[]
+                   arr=ratings[i]
+                   sum=0
+                   for(var j=0;j<arr.length;j++){
+                     sum+=arr[j].rating
+                   }
+                   sum/=(arr.length)
+                   graph.push(Math.floor(sum))
+                }
+                console.log(graph)
+                console.log(ratingchange)
+
+                datas=[]
+                for(var i=0;i<graph.length;i++){
+                    datas.push({x:graph[i],y:ratingchange[i]})
+                }
+
+                var chartid1=document.getElementById("myChart1").getContext("2d")
+
+                new Chart(chartid1,{
+                    type:"scatter",
+                    data:{
+                        datasets: [{
+                            pointRadius: 4,
+                            pointBackgroundColor: "rgb(0,0,255)",
+                            data: datas
+                          }]
+                    }
+                })
+                document.getElementById("graphstatement").innerHTML="rating change with average rating problem solve in given time period"
+
+
+                
                 
            }
            
