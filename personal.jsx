@@ -1,8 +1,5 @@
 const url="https://codeforces.com/api/"
 let initialtime
-var datas=[]
-var ratings=[]
-var ratingchange=[]
 
 
 window.onload=function(){
@@ -23,6 +20,12 @@ window.onload=function(){
         handle.value=''
         var store=[];
         // fetching api for data
+
+        const fetchPromise=[]
+        fetchPromise.push(getratingdata(url));
+        fetchPromise.push(getproblemdata(url));
+
+
         async function getratingdata(url){
             const user=`user.rating?handle=${handlevalue}`
 
@@ -34,27 +37,7 @@ window.onload=function(){
                err_message("aleast give 10 contests")
                return;
             }
-            nextquery(data.result)
-        }
-        getratingdata(url)
-       
-        function nextquery(data){
-            
-    
-            initialtime=data[0].ratingUpdateTimeSeconds
-            let prev=0
-            for(var i=0;i<data.length;i++){
-               ratingchange.push(data[i].newRating-prev)
-               prev=data[i].newRating
-            }
-
-            for(var it=0;it<data.length;it++){
-              datas.push({x:data[it].ratingUpdateTimeSeconds-initialtime,y:data[it].newRating})
-            }
-            console.log(datas)
-
-
-
+            store.push(data.result)
         }
         // fetching data of users problems submit
         async function getproblemdata(url){
@@ -67,13 +50,44 @@ window.onload=function(){
                 err_message("atleast submit 50 problems")
                 return;
             }
-
-            callforproblemset(data.result)
+            store.push(data.result)
             
            }
-           getproblemdata(url)
+           Promise.all(fetchPromise)
+  .then(() => {
+   const res= nextquery(store[0])
+    callforproblemset(store[1],res)
 
-           async function callforproblemset(data){
+  })
+  .catch((error) => {
+    
+    console.error(error);
+  });
+
+     
+  function nextquery(data){
+            
+    var ratingchange=[]
+    initialtime=data[0].ratingUpdateTimeSeconds
+    let prev=0
+    for(var i=0;i<data.length;i++){
+       ratingchange[i]=data[i].newRating-prev
+       prev=data[i].newRating
+    }
+
+    var datas=[]
+
+    for(var it=0;it<data.length;it++){
+      datas.push({x:data[it].ratingUpdateTimeSeconds-initialtime,y:data[it].newRating})
+    }
+    console.log(datas)
+
+    return {ratingchange,datas};
+
+}
+
+           async function callforproblemset(data,item){
+                const {ratingchange,datas}=item
                 let filterdata=[]
                 for(var i=0;i<data.length;i++){
                     if(data[i].verdict=="OK"){
@@ -82,6 +96,7 @@ window.onload=function(){
                 }
                 console.log(filterdata)
                 let prevtime=0
+                var ratings=[]
                 for(var i=0;i<datas.length;i++){
                     let currtime=datas[i].x+initialtime
                     ratings[i]=[]
@@ -94,8 +109,8 @@ window.onload=function(){
                 }
                 console.log(ratings)
 
-                let graph=[]
-                for(var i=0;i<ratings.length;i++){
+                let dataid=[]
+                for(var i=6;i<ratings.length;i++){
                    let arr=[]
                    arr=ratings[i]
                    sum=0
@@ -111,18 +126,11 @@ window.onload=function(){
                    if((arr.length)){
                    sum/=(arr.length)
                    }
-                   graph.push(Math.floor(sum))
+                   dataid.push({x:Math.floor(sum),y:ratingchange[i]})
                 }
-                console.log(graph)
-                console.log(ratingchange)
-
-                var dataid=[]
-                for(var i=0;i<graph.length;i++){
-                    dataid.push({x:graph[i],y:ratingchange[i]})
-                }
-
-                var chartid1=document.getElementById("myChart1").getContext("2d")
-
+                
+                 var chartid1=document.getElementById("myChart1").getContext("2d")
+                 console.log(dataid)
                 new Chart(chartid1,{
                     type:"scatter",
                     data:{
@@ -134,7 +142,7 @@ window.onload=function(){
                     }
                 })
                 document.getElementById("graphstatement").innerHTML="rating change with average rating problem solve in given time period"
-                
+
                 
                 const model=createModel()
                 tfvis.show.modelSummary({name:'ModelSummary'},model)
@@ -146,6 +154,8 @@ window.onload=function(){
                 // train the data
                  await trainmodel(model,inputs,labels)
                 console.log('done training')
+
+                testmodel(model,dataid,TensorData)
                 
                 
            }
@@ -158,6 +168,8 @@ window.onload=function(){
 
                     //add single input layer
                     model.add(tf.layers.dense({inputShape:[1],units:1,useBias:true}))
+
+                    //model.add(tf.layers.dense({units: 2, activation: 'sigmoid'}));
 
                     // add output layer
                     model.add(tf.layers.dense({units:1,useBias:true}))
@@ -210,8 +222,8 @@ window.onload=function(){
                         loss: tf.losses.meanSquaredError,
                         metrics: ['mse'],
                     })
-                    const batchSize =datas.length
-                    const epochs = 50
+                    const batchSize =32
+                    const epochs = 40
 
                     return await model.fit(inputs,labels,{
                         batchSize,
@@ -224,6 +236,37 @@ window.onload=function(){
                         )
                     })
                                     
+                }
+
+                function testmodel(model,inputdata,normalizationdata){
+                    const {inputMin,inputMax,labelMin,labelMax}=normalizationdata
+
+                    const [xs,preds]=tf.tidy(()=>{
+                        const xsNorm=tf.linspace(0,1,10)
+                        const predictions= model.predict(xsNorm.reshape([10,1]))
+
+                        const unNormxs=xsNorm.mul(inputMax.sub(inputMin)).add(inputMin)
+                        const unNormPreds=predictions.mul(labelMax.sub(labelMin)).add(labelMin)
+
+                        return [unNormxs.dataSync(),unNormPreds.dataSync()]
+                    })
+
+                    const predictedpoints=Array.from(xs).map((val,i)=>{
+                        return {x:val,y:preds[i]}
+                    })
+                    const normalpoints=inputdata.map(i=>({
+                          x:i.x,y:i.y,
+                    }))
+                    tfvis.render.scatterplot(
+                        {name:'model prediction vs original data'},
+                        {values:[normalpoints,predictedpoints],series:['original','predicted']},
+                        {
+                            xLabel:'average rating problems',
+                            yLabel:'rating change',
+                            height:300
+                        }
+
+                    )
                 }
                 
 
