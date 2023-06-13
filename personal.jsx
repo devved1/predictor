@@ -169,7 +169,7 @@ window.onload=function(){
                     //add single input layer
                     model.add(tf.layers.dense({inputShape:[1],units:1,useBias:true}))
 
-                    //model.add(tf.layers.dense({units: 2, activation: 'sigmoid'}));
+                   // model.add(tf.layers.dense({units: 1, activation: 'sigmoid'}));
 
                     // add output layer
                     model.add(tf.layers.dense({units:1,useBias:true}))
@@ -222,8 +222,8 @@ window.onload=function(){
                         loss: tf.losses.meanSquaredError,
                         metrics: ['mse'],
                     })
-                    const batchSize =32
-                    const epochs = 40
+                    const batchSize =100
+                    const epochs =35
 
                     return await model.fit(inputs,labels,{
                         batchSize,
